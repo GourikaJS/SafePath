@@ -1,10 +1,13 @@
 const express = require("express");
-const app = express();
+const cors = require("cors");
 
-app.get("/", (req, res) => {
-  res.send("SafePath Backend Running");
+const app = express();
+app.use(cors());
+
+app.get("/api/test", (req, res) => {
+  res.json({ message: "SafePath Backend Connected Successfully 🚀" });
 });
 
-app.listen(5000, () => {
-  console.log("Server running on port 5000");
+app.listen(7000, () => {
+  console.log("Server running on port 7000");
 });
