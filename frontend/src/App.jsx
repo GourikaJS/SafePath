@@ -1,19 +1,24 @@
-import { useEffect, useState } from "react";
+import "./App.css";
 
 function App() {
-  const [message, setMessage] = useState("");
-
-  useEffect(() => {
-    fetch("http://localhost:7000/api/test")
-      .then((res) => res.json())
-      .then((data) => setMessage(data.message))
-      .catch((err) => console.log(err));
-  }, []);
-
   return (
-    <div>
-      <h1>SafePath</h1>
-      <p>{message}</p>
+    <div className="app-container">
+      <header>
+        <h1>SafePath</h1>
+      </header>
+
+      <main>
+        <section>
+          <h2>Map Area</h2>
+          <div className="map-box">
+            Map will appear here
+          </div>
+        </section>
+
+        <section>
+          <button>Report Unsafe Location</button>
+        </section>
+      </main>
     </div>
   );
 }
