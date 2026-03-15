@@ -68,7 +68,9 @@ function HeatmapLayer({ reports }) {
   useEffect(() => {
     if (!reports.length) return;
 
-    const heatData = reports.map((r) => [
+  const heatData = reports
+  .filter((r) => r.latitude && r.longitude)
+  .map((r) => [
       r.latitude,
       r.longitude,
       0.5
@@ -163,7 +165,9 @@ function HeatmapLayer({ reports }) {
 <HeatmapLayer reports={reports} />
   <MapClickHandler />
 
-  {reports.map((report) => (
+  {reports
+  .filter((report) => report.latitude && report.longitude)
+  .map((report) => (
     <Marker key={report.id} position={[report.latitude, report.longitude]}>
       <Popup>
         <strong>{report.location_name}</strong>
@@ -177,17 +181,20 @@ function HeatmapLayer({ reports }) {
       <h2>Reported Unsafe Locations</h2>
 
       {reports.length === 0 ? (
-        <p>No reports yet</p>
-      ) : (
-        reports.map((report) => (
-          <div key={report.id} className="report-card">
-            <h4>{report.location_name}</h4>
-            <p>{report.description}</p>
-          </div>
-        ))
-      )}
-    </div>
-  );
+  <p>No reports yet</p>
+) : (
+  reports
+    .filter((r) => r.latitude && r.longitude)
+    .map((report) => (
+      <div key={report.id} className="report-card">
+        <h4>{report.location_name}</h4>
+        <p>{report.description}</p>
+      </div>
+    ))
+)}
+
+</div>
+);
 }
 
 export default App;
