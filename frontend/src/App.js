@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import L from "leaflet";
 import { useMapEvents } from "react-leaflet";
+import "leaflet.heat";
 import "./App.css";
 
 function App() {
@@ -59,6 +61,34 @@ const [userPosition, setUserPosition] = useState([20.5937, 78.9629]);
 
     fetchReports();
   };
+
+function HeatmapLayer({ reports }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!reports.length) return;
+
+    const heatData = reports.map((r) => [
+      r.latitude,
+      r.longitude,
+      0.5
+    ]);
+
+    const heat = L.heatLayer(heatData, {
+      radius: 25,
+      blur: 15,
+      maxZoom: 17,
+    });
+
+    heat.addTo(map);
+
+    return () => {
+      map.removeLayer(heat);
+    };
+  }, [reports, map]);
+
+  return null;
+}
 
   function RecenterMap({ position }) {
   const map = useMap();
@@ -130,6 +160,7 @@ const [userPosition, setUserPosition] = useState([20.5937, 78.9629]);
     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
   />
 <RecenterMap position={userPosition} />
+<HeatmapLayer reports={reports} />
   <MapClickHandler />
 
   {reports.map((report) => (
