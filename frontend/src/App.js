@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import { useMapEvents } from "react-leaflet";
 import "./App.css";
 
@@ -9,6 +9,7 @@ function App() {
   const [reports, setReports] = useState([]);
   const [latitude, setLatitude] = useState(null);
 const [longitude, setLongitude] = useState(null);
+const [userPosition, setUserPosition] = useState([20.5937, 78.9629]);
 
   const fetchReports = () => {
     fetch("http://localhost:5000/api/reports")
@@ -19,8 +20,17 @@ const [longitude, setLongitude] = useState(null);
   };
 
   useEffect(() => {
-    fetchReports();
-  }, []);
+  fetchReports();
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition((position) => {
+      setUserPosition([
+        position.coords.latitude,
+        position.coords.longitude
+      ]);
+    });
+  }
+}, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -49,6 +59,12 @@ const [longitude, setLongitude] = useState(null);
 
     fetchReports();
   };
+
+  function RecenterMap({ position }) {
+  const map = useMap();
+  map.setView(position);
+  return null;
+}
 
   function MapClickHandler() {
   useMapEvents({
@@ -105,15 +121,15 @@ const [longitude, setLongitude] = useState(null);
     <h2>Unsafe Locations Map</h2>
 
 <MapContainer
-  center={[20.5937, 78.9629]}
-  zoom={5}
+ center={userPosition}
+  zoom={15}
   style={{ height: "400px", width: "100%", marginBottom: "30px" }}
 >
   <TileLayer
     attribution='&copy; OpenStreetMap contributors'
     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
   />
-
+<RecenterMap position={userPosition} />
   <MapClickHandler />
 
   {reports.map((report) => (
