@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "./App.css";
 
 function App() {
@@ -79,6 +80,29 @@ function App() {
         <button type="submit">Submit Report</button>
 </form>
 </div>
+
+    <h2>Unsafe Locations Map</h2>
+
+<MapContainer
+  center={[20.5937, 78.9629]}
+  zoom={5}
+  style={{ height: "400px", width: "100%", marginBottom: "30px" }}
+>
+  <TileLayer
+    attribution='&copy; OpenStreetMap contributors'
+    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+  />
+
+  {reports.map((report) => (
+    <Marker key={report.id} position={[report.latitude, report.longitude]}>
+      <Popup>
+        <strong>{report.location_name}</strong>
+        <br />
+        {report.description}
+      </Popup>
+    </Marker>
+  ))}
+</MapContainer>
 
       <h2>Reported Unsafe Locations</h2>
 
