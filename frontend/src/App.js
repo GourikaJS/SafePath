@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { useMapEvents } from "react-leaflet";
 import "./App.css";
 
 function App() {
   const [locationName, setLocationName] = useState("");
   const [description, setDescription] = useState("");
   const [reports, setReports] = useState([]);
+  const [latitude, setLatitude] = useState(null);
+const [longitude, setLongitude] = useState(null);
 
   const fetchReports = () => {
     fetch("http://localhost:5000/api/reports")
@@ -22,12 +25,12 @@ function App() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const reportData = {
-      location_name: locationName,
-      description: description,
-      latitude: 0,
-      longitude: 0
-    };
+   const reportData = {
+  location_name: locationName,
+  description: description,
+  latitude: latitude,
+  longitude: longitude
+};
 
     const response = await fetch("http://localhost:5000/api/report", {
       method: "POST",
@@ -41,9 +44,21 @@ function App() {
 
     setLocationName("");
     setDescription("");
+    setLatitude(null);
+    setLongitude(null);
 
     fetchReports();
   };
+
+  function MapClickHandler() {
+  useMapEvents({
+    click(e) {
+      setLatitude(e.latlng.lat);
+      setLongitude(e.latlng.lng);
+    },
+  });
+  return null;
+}
 
   return (
    <div className="container">
@@ -77,6 +92,12 @@ function App() {
 
         <br />
 
+        {latitude && longitude && (
+        <p>
+     Selected Location: {latitude.toFixed(5)}, {longitude.toFixed(5)}
+      </p>
+    )}
+
         <button type="submit">Submit Report</button>
 </form>
 </div>
@@ -92,6 +113,8 @@ function App() {
     attribution='&copy; OpenStreetMap contributors'
     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
   />
+
+  <MapClickHandler />
 
   {reports.map((report) => (
     <Marker key={report.id} position={[report.latitude, report.longitude]}>
