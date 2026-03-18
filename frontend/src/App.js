@@ -13,6 +13,15 @@ function App() {
 const [longitude, setLongitude] = useState(null);
 const [userPosition, setUserPosition] = useState([20.5937, 78.9629]);
 
+const useCurrentLocation = () => {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition((position) => {
+      setLatitude(position.coords.latitude);
+      setLongitude(position.coords.longitude);
+    });
+  }
+};
+
   const fetchReports = () => {
     fetch("http://localhost:5000/api/reports")
       .then((res) => res.json())
@@ -145,6 +154,10 @@ function HeatmapLayer({ reports }) {
      Selected Location: {latitude.toFixed(5)}, {longitude.toFixed(5)}
       </p>
     )}
+
+        <button type="button" onClick={useCurrentLocation}>
+  Use My Current Location
+</button>
 
         <button type="submit">Submit Report</button>
 </form>
