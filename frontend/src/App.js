@@ -12,6 +12,8 @@ function App() {
   const [latitude, setLatitude] = useState(null);
 const [longitude, setLongitude] = useState(null);
 const [userPosition, setUserPosition] = useState([20.5937, 78.9629]);
+const [searchQuery, setSearchQuery] = useState("");
+const [searchedPosition, setSearchedPosition] = useState(null);
 
 const useCurrentLocation = () => {
   if (navigator.geolocation) {
@@ -117,6 +119,105 @@ function HeatmapLayer({ reports }) {
   return null;
 }
 
+const calculateSafetyScore = (report) => {
+  let score = 100;
+  const desc = report.description.toLowerCase();
+
+  const riskKeywords = [
+    { word: "dark", penalty: 20 },
+    { word: "robbery", penalty: 30 },
+    { word: "harassment", penalty: 25 },
+    { word: "isolated", penalty: 15 },
+    { word: "drug", penalty: 25 },
+    { word: "drugs", penalty: 25 },
+    { word: "theft", penalty: 20 },
+    { word: "attack", penalty: 30 },
+    { word: "unsafe", penalty: 15 },
+    { word: "crime", penalty: 25 },
+    { word: "drunk", penalty: 20 },
+    { word: "drunkard", penalty: 20 },
+    { word: "drunkards", penalty: 20 },
+    { word: "alcohol", penalty: 15 },
+    { word: "eve teasing", penalty: 25 },
+    { word: "stalking", penalty: 30 },
+    { word: "assault", penalty: 35 }
+  ];
+
+  riskKeywords.forEach((item) => {
+    if (desc.includes(item.word)) {
+      score -= item.penalty;
+    }
+  });
+
+  return Math.max(score, 0);
+};
+
+const calculateAreaScore = (currentReport) => {
+  const nearbyReports = reports.filter((r) => {
+    const distance =
+      Math.abs(r.latitude - currentReport.latitude) +
+      Math.abs(r.longitude - currentReport.longitude);
+
+    return distance < 0.005; // nearby threshold
+  });
+
+  if (nearbyReports.length === 0) return calculateSafetyScore(currentReport);
+
+  const total = nearbyReports.reduce(
+    (sum, r) => sum + calculateSafetyScore(r),
+    0
+  );
+
+  return Math.round(total / nearbyReports.length);
+};
+
+const getRiskLevel = (score) => {
+  if (score >= 70) return { label: "Safe", color: "green" };
+  if (score >= 40) return { label: "Moderate", color: "orange" };
+  return { label: "Dangerous", color: "red" };
+};
+
+const handleSearch = async () => {
+  if (!searchQuery) return;
+
+  const res = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&q=${searchQuery}`
+  );
+  const data = await res.json();
+
+  if (data.length > 0) {
+    const lat = parseFloat(data[0].lat);
+    const lon = parseFloat(data[0].lon);
+
+setUserPosition([lat, lon]);
+setSearchedPosition([lat, lon]);  } else {
+    alert("Location not found");
+  }
+};
+
+const calculateLocationSafety = () => {
+  if (!searchedPosition) return 100;
+
+  const nearbyReports = reports.filter((r) => {
+    const distance =
+      Math.abs(r.latitude - searchedPosition[0]) +
+      Math.abs(r.longitude - searchedPosition[1]);
+
+    return distance < 0.005;
+  });
+
+  if (nearbyReports.length === 0) return 100;
+
+  const total = nearbyReports.reduce(
+    (sum, r) => sum + calculateSafetyScore(r),
+    0
+  );
+
+  return Math.round(total / nearbyReports.length);
+};
+
+
+
   return (
    <div className="container">
       <h1 className="title">SafePath</h1>
@@ -165,6 +266,34 @@ function HeatmapLayer({ reports }) {
 
     <h2>Unsafe Locations Map</h2>
 
+<div style={{ marginBottom: "20px" }}>
+  <input
+    type="text"
+    placeholder="Search location..."
+    value={searchQuery}
+    onChange={(e) => setSearchQuery(e.target.value)}
+  />
+  <button onClick={handleSearch}>Search</button>
+
+  {searchedPosition && (
+  <div style={{ marginBottom: "10px" }}>
+    {(() => {
+      const score = calculateLocationSafety();
+      const risk = getRiskLevel(score);
+
+      return (
+        <p>
+          Area Safety Score: {score} / 100 —{" "}
+          <span style={{ color: risk.color, fontWeight: "bold" }}>
+            {risk.label}
+          </span>
+        </p>
+      );
+    })()}
+  </div>
+)}
+</div>
+
 <MapContainer
  center={userPosition}
   zoom={15}
@@ -198,14 +327,24 @@ function HeatmapLayer({ reports }) {
 ) : (
   reports
     .filter((r) => r.latitude && r.longitude)
-    .map((report) => (
-      <div key={report.id} className="report-card">
-        <h4>{report.location_name}</h4>
-        <p>{report.description}</p>
-      </div>
-    ))
-)}
+    .map((report) => {
+      const score = calculateAreaScore(report);
+      const risk = getRiskLevel(score);
 
+      return (
+        <div key={report.id} className="report-card">
+          <h4>{report.location_name}</h4>
+          <p>{report.description}</p>
+
+          <p>Safety Score: {score} / 100</p>
+
+          <p style={{ color: risk.color, fontWeight: "bold" }}>
+            {risk.label}
+          </p>
+        </div>
+      );
+    })
+)}
 </div>
 );
 }
