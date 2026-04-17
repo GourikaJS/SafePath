@@ -1,28 +1,48 @@
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import { useMapEvents } from "react-leaflet";
 import "leaflet.heat";
 import "./App.css";
+
+const getCurrentPosition = () =>
+  new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Geolocation is not supported by your browser."));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 10000,
+    });
+  });
 
 function App() {
   const [locationName, setLocationName] = useState("");
   const [description, setDescription] = useState("");
   const [reports, setReports] = useState([]);
   const [latitude, setLatitude] = useState(null);
-const [longitude, setLongitude] = useState(null);
-const [userPosition, setUserPosition] = useState([20.5937, 78.9629]);
-const [searchQuery, setSearchQuery] = useState("");
-const [searchedPosition, setSearchedPosition] = useState(null);
+  const [longitude, setLongitude] = useState(null);
+  const [userPosition, setUserPosition] = useState([20.5937, 78.9629]);
+  const [source, setSource] = useState("");
+  const [destination, setDestination] = useState("");
+  const [searchedPosition, setSearchedPosition] = useState(null);
+  const [routePath, setRoutePath] = useState([]);
+  const [isSendingSos, setIsSendingSos] = useState(false);
+  const [sosFeedback, setSosFeedback] = useState(null);
 
-const useCurrentLocation = () => {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition((position) => {
+
+  const handleUseCurrentLocation = async () => {
+    try {
+      const position = await getCurrentPosition();
       setLatitude(position.coords.latitude);
       setLongitude(position.coords.longitude);
-    });
-  }
-};
+      setUserPosition([position.coords.latitude, position.coords.longitude]);
+    } catch {
+      alert("Unable to fetch your current location.");
+    }
+  };
 
   const fetchReports = () => {
     fetch("http://localhost:5000/api/reports")
@@ -35,14 +55,14 @@ const useCurrentLocation = () => {
   useEffect(() => {
   fetchReports();
 
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition((position) => {
+  getCurrentPosition()
+    .then((position) => {
       setUserPosition([
         position.coords.latitude,
         position.coords.longitude
       ]);
-    });
-  }
+    })
+    .catch(() => {});
 }, []);
 
   const handleSubmit = async (e) => {
@@ -177,23 +197,117 @@ const getRiskLevel = (score) => {
   return { label: "Dangerous", color: "red" };
 };
 
-const handleSearch = async () => {
-  if (!searchQuery) return;
+const clearRouteSelection = () => {
+  setSearchedPosition(null);
+  setRoutePath([]);
+};
 
-  const res = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=json&q=${searchQuery}`
-  );
-  const data = await res.json();
+const getLocationErrorMessage = (error) => {
+  if (!error) {
+    return "Unable to access your location right now.";
+  }
 
-  if (data.length > 0) {
-    const lat = parseFloat(data[0].lat);
-    const lon = parseFloat(data[0].lon);
+  if (error.code === 1) {
+    return "Location permission was denied. Please allow location access and try again.";
+  }
 
-setUserPosition([lat, lon]);
-setSearchedPosition([lat, lon]);  } else {
-    alert("Location not found");
+  if (error.code === 2) {
+    return "Your location could not be determined. Please try again.";
+  }
+
+  if (error.code === 3) {
+    return "Location request timed out. Please try again.";
+  }
+
+  return error.message || "Unable to access your location right now.";
+};
+
+const handleSosAlert = async () => {
+  setIsSendingSos(true);
+  setSosFeedback(null);
+
+  try {
+    const position = await getCurrentPosition();
+    const currentLatitude = position.coords.latitude;
+    const currentLongitude = position.coords.longitude;
+    const mapsLink = `https://www.google.com/maps?q=${currentLatitude},${currentLongitude}`;
+    const alertMessage = `I am in danger. My location: ${mapsLink}`;
+    const whatsappLink = `https://wa.me/?text=${encodeURIComponent(alertMessage)}`;
+
+    setUserPosition([currentLatitude, currentLongitude]);
+
+    const popup = window.open(whatsappLink, "_blank", "noopener,noreferrer");
+
+    if (!popup) {
+      window.location.href = whatsappLink;
+    }
+
+    setSosFeedback({
+      type: "success",
+      message: "WhatsApp opened with your live location alert.",
+    });
+  } catch (error) {
+    setSosFeedback({
+      type: "error",
+      message: getLocationErrorMessage(error),
+    });
+  } finally {
+    setIsSendingSos(false);
   }
 };
+
+const handleSearch = async () => {
+  if (!source || !destination) {
+    clearRouteSelection();
+    alert("Enter both source and destination");
+    return;
+  }
+
+  try {
+    const getCoords = async (place) => {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(place)}`
+      );
+      const data = await res.json();
+
+      if (data.length === 0) return null;
+
+      return [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+    };
+
+    const getRoutePath = async (startCoords, endCoords) => {
+      const res = await fetch(
+        `https://router.project-osrm.org/route/v1/driving/${startCoords[1]},${startCoords[0]};${endCoords[1]},${endCoords[0]}?overview=full&geometries=geojson`
+      );
+      const data = await res.json();
+
+      if (!data.routes || data.routes.length === 0) {
+        return [startCoords, endCoords];
+      }
+
+      return data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
+    };
+
+    const srcCoords = await getCoords(source);
+    const destinationCoords = await getCoords(destination);
+
+    if (!srcCoords || !destinationCoords) {
+      clearRouteSelection();
+      alert("Location not found");
+      return;
+    }
+
+    const nextRoutePath = await getRoutePath(srcCoords, destinationCoords);
+
+    setUserPosition(srcCoords);
+    setSearchedPosition(destinationCoords);
+    setRoutePath(nextRoutePath);
+  } catch (error) {
+    clearRouteSelection();
+    alert("Unable to load the route right now.");
+  }
+};
+
 
 const calculateLocationSafety = () => {
   if (!searchedPosition) return 100;
@@ -216,11 +330,48 @@ const calculateLocationSafety = () => {
   return Math.round(total / nearbyReports.length);
 };
 
+const FitRouteBounds = ({ path }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!path.length) return;
+
+    map.fitBounds(L.latLngBounds(path), {
+      padding: [40, 40],
+    });
+  }, [map, path]);
+
+  return null;
+};
 
 
   return (
    <div className="container">
       <h1 className="title">SafePath</h1>
+
+      <div className="sos-panel">
+        <div>
+          <h2 className="sos-title">Emergency SOS</h2>
+          <p className="sos-copy">
+            Tap this button to fetch your live location and open WhatsApp with a ready-to-send emergency alert.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          className="sos-button"
+          onClick={handleSosAlert}
+          disabled={isSendingSos}
+        >
+          {isSendingSos ? "Preparing SOS..." : "Send SOS on WhatsApp"}
+        </button>
+
+        {sosFeedback && (
+          <p className={`sos-status ${sosFeedback.type}`}>
+            {sosFeedback.message}
+          </p>
+        )}
+      </div>
 
       <h2>Report Unsafe Location</h2>
 
@@ -256,7 +407,7 @@ const calculateLocationSafety = () => {
       </p>
     )}
 
-        <button type="button" onClick={useCurrentLocation}>
+        <button type="button" onClick={handleUseCurrentLocation}>
   Use My Current Location
 </button>
 
@@ -269,40 +420,60 @@ const calculateLocationSafety = () => {
 <div style={{ marginBottom: "20px" }}>
   <input
     type="text"
-    placeholder="Search location..."
-    value={searchQuery}
-    onChange={(e) => setSearchQuery(e.target.value)}
+    placeholder="Enter source..."
+    value={source}
+    onChange={(e) => setSource(e.target.value)}
   />
-  <button onClick={handleSearch}>Search</button>
+
+  <input
+    type="text"
+    placeholder="Enter destination..."
+    value={destination}
+    onChange={(e) => setDestination(e.target.value)}
+  />
+
+  <button onClick={handleSearch}>Find Route</button>
 
   {searchedPosition && (
-  <div style={{ marginBottom: "10px" }}>
-    {(() => {
-      const score = calculateLocationSafety();
-      const risk = getRiskLevel(score);
+    <div style={{ marginTop: "10px" }}>
+      {(() => {
+        const score = calculateLocationSafety();
+        const risk = getRiskLevel(score);
 
-      return (
-        <p>
-          Area Safety Score: {score} / 100 —{" "}
-          <span style={{ color: risk.color, fontWeight: "bold" }}>
-            {risk.label}
-          </span>
-        </p>
-      );
-    })()}
-  </div>
-)}
+        return (
+          <p>
+            Area Safety Score: {score} / 100 -{" "}
+            <span style={{ color: risk.color, fontWeight: "bold" }}>
+              {risk.label}
+            </span>
+          </p>
+        );
+      })()}
+    </div>
+  )}
 </div>
-
 <MapContainer
  center={userPosition}
   zoom={15}
   style={{ height: "400px", width: "100%", marginBottom: "30px" }}
 >
+
   <TileLayer
     attribution='&copy; OpenStreetMap contributors'
     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
   />
+
+{routePath.length > 0 && (
+  <>
+    <Polyline
+      positions={routePath}
+      pathOptions={{ color: "#0d6efd", weight: 5, opacity: 0.9 }}
+    />
+    <FitRouteBounds path={routePath} />
+  </>
+)}
+
+  
 <RecenterMap position={userPosition} />
 <HeatmapLayer reports={reports} />
   <MapClickHandler />
