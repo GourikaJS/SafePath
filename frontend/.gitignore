@@ -10,6 +10,12 @@
 
 # production
 /build
+/build-auth-check
+/build-auth-check-final
+/build-landing-tune
+/build-auth-card-size
+/build-auth-card-actual-large
+/build-landing-reference-match
 
 # misc
 .DS_Store
